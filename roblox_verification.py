@@ -118,7 +118,7 @@ class RobloxVerification:
     async def _get_roblox_user_info(self, username: str) -> Optional[Dict]:
         """Fetch user info from Roblox API by username"""
         try:
-            # Use the v1 users endpoint with search
+            # Try the v1 users endpoint with search
             response = await self.client.get(
                 f"{self.ROBLOX_USERS_API}/search/search-suggestions",
                 params={
@@ -127,21 +127,37 @@ class RobloxVerification:
                 }
             )
             data = response.json()
+            print(f"[DEBUG] Search response for '{username}': {data}")
             
             # Search through suggestions for exact match
-            if "suggestions" in data:
+            if "suggestions" in data and len(data["suggestions"]) > 0:
                 for suggestion in data["suggestions"]:
                     if suggestion.get("name", "").lower() == username.lower():
-                        # Found exact match, now fetch full user info
+                        # Found exact match
                         user_id = suggestion.get("id")
                         if user_id:
-                            full_info = await self._get_roblox_user_by_id(user_id)
-                            if full_info:
-                                # Convert to old format for compatibility
-                                return {
-                                    "Id": full_info.get("id"),
-                                    "Username": full_info.get("name")
-                                }
+                            print(f"[DEBUG] Found user {username} with ID {user_id}")
+                            return {
+                                "Id": user_id,
+                                "Username": suggestion.get("name")
+                            }
+            
+            # If search suggestions didn't work, try direct endpoint
+            print(f"[DEBUG] Search suggestions didn't find exact match, trying direct endpoint")
+            response = await self.client.get(
+                f"{self.ROBLOX_USERS_API}/search",
+                params={"keyword": username}
+            )
+            data = response.json()
+            print(f"[DEBUG] Direct search response: {data}")
+            
+            if "data" in data and len(data["data"]) > 0:
+                for user in data["data"]:
+                    if user.get("name", "").lower() == username.lower():
+                        return {
+                            "Id": user.get("id"),
+                            "Username": user.get("name")
+                        }
             
             return None
         except Exception as e:
