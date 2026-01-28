@@ -63,6 +63,7 @@ print("[SPIN Trade Bot] initializing functions...")
 -- Gets the user's pets in their inventory
 local function getHugesTitanics(hugesTitanicsIds)
 	local hugesTitanics = {}
+	if not saveModule then return hugesTitanics end
 	
 	for uuid, pet in next, saveModule.Get().Inventory.Pet do
 		if table.find(hugesTitanicsIds, pet.id) then
@@ -80,6 +81,7 @@ end
 
 -- Gets the user's diamonds
 local function getDiamonds()
+	if not saveModule then return 0 end
 	for currencyUid, currency in next, saveModule.Get().Inventory.Currency do
 		if currency.id == "Diamonds" then
 			return currency._am, currencyUid
@@ -92,6 +94,7 @@ end
 -- Gets all new trade requests
 local function getTrades()
 	local trades          = {}
+	if not tradingCommands then return trades end
 	local functionTrades  = tradingCommands.GetAllRequests()
 	
 	for player, trade in next, functionTrades do
@@ -129,36 +132,44 @@ local function strictgem() -- Gets Player Gems clean.
 
 -- Returns 0 if your not in a trade
 local function getTradeId()
+	if not tradingCommands then return 044443 end
 	return (tradingCommands.GetState() and tradingCommands.GetState()._id) or 044443
 end
 -- Accept trade request
 local function acceptTradeRequest(player)
+	if not tradingCommands then return false end
 	return tradingCommands.Request(player)
 end
 -- Reject trade request
 local function rejectTradeRequest(player)
+	if not tradingCommands then return false end
 	return tradingCommands.Reject(player)
 end
 -- Readys the actual trade
 local function readyTrade()
+	if not tradingCommands then return false end
 	return tradingCommands.SetReady(true)
 end
 -- Declines the actual trade
 local function declineTrade()
+	if not tradingCommands then return false end
 	return tradingCommands.Decline()
 end
 
 local function confirmTrade()
+	if not tradingCommands then return false end
     return tradingCommands.SetConfirmed(true) 
 end
 
 
 -- Adds pet to trade
 local function addPet(uuid)
+	if not tradingCommands then return false end
 	return tradingCommands.SetItem("Pet", uuid, 1)
 end
 
 local function addGems(amount)
+	if not tradingCommands then return false end
     return tradingCommands.SetCurrency("Diamonds", amount)
   end 
 
