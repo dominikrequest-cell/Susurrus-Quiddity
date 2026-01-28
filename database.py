@@ -95,7 +95,7 @@ class Database:
         return user.get("thumbnail") if user else None
     
     # Discord User Linking
-    async def link_discord_to_roblox(self, discord_id: int, roblox_user_id: int, discord_username: str = None):
+    async def link_discord_to_roblox(self, discord_id: int, roblox_user_id: int, roblox_username: str, discord_username: str = None):
         """Link Discord user to Roblox account"""
         self.discord_users.update_one(
             {"discord_id": discord_id},
@@ -103,6 +103,7 @@ class Database:
                 "$set": {
                     "discord_id": discord_id,
                     "roblox_user_id": roblox_user_id,
+                    "roblox_username": roblox_username,
                     "discord_username": discord_username,
                     "verified": True,
                     "verified_at": datetime.utcnow()

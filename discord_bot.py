@@ -151,9 +151,12 @@ async def unlink_account(interaction: discord.Interaction):
     # Remove the link from database
     await db.unlink_discord_from_roblox(interaction.user.id)
     
+    # Get username for display (with fallback)
+    roblox_name = discord_user.get('roblox_username', f"ID {discord_user.get('roblox_user_id', 'unknown')}")
+    
     embed = discord.Embed(
         title="✅ Account Unlinked",
-        description=f"Your Roblox account **{discord_user['roblox_username']}** has been unlinked.\n\nYou can now verify a different account with `/verify`.",
+        description=f"Your Roblox account **{roblox_name}** has been unlinked.\n\nYou can now verify a different account with `/verify`.",
         color=discord.Color.green()
     )
     await interaction.followup.send(embed=embed)
@@ -208,6 +211,7 @@ async def verify_confirm(interaction: discord.Interaction, roblox_username: str)
     await db.link_discord_to_roblox(
         discord_id=interaction.user.id,
         roblox_user_id=user_id,
+        roblox_username=username,
         discord_username=str(interaction.user)
     )
     
