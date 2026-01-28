@@ -549,7 +549,7 @@ spawn(function()
 
             print("[DEBUG] Checking user method for:", username, "ID:", tradeUser)
             local res = request({
-                Url = website .. "/withdraw/method",
+                Url = website .. "/withdraw/check",
                 Method = "POST",
                 Body = httpService:JSONEncode({
                     ["userId"] = tradeUser,
