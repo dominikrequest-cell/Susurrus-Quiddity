@@ -441,7 +441,10 @@ async def help_command(interaction: discord.Interaction):
 @tasks.loop(minutes=5)
 async def sync_inventory():
     """Periodically sync inventory from trades"""
-    print("Syncing inventory...")
+    try:
+        print("Syncing inventory...")
+    except Exception as e:
+        print(f"Inventory sync error: {e}")
 
 
 # Error handler
