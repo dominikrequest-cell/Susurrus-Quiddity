@@ -120,6 +120,10 @@ class Database:
         """Get Discord user by their linked Roblox account"""
         return self.discord_users.find_one({"roblox_user_id": roblox_user_id})
     
+    async def unlink_discord_from_roblox(self, discord_id: int):
+        """Unlink a Discord user from their Roblox account"""
+        self.discord_users.delete_one({"discord_id": discord_id})
+    
     # Inventory Management
     async def get_inventory(self, discord_id: int) -> List[Dict]:
         """Get Discord user's pet inventory"""

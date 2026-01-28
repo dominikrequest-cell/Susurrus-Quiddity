@@ -50,6 +50,17 @@ async def verify_account(interaction: discord.Interaction, roblox_username: str)
     """Verify your Roblox account and link it to Discord"""
     await interaction.response.defer()
     
+    # Check if user already has a linked account
+    existing_link = await db.get_discord_user(interaction.user.id)
+    if existing_link:
+        embed = discord.Embed(
+            title="❌ Account Already Linked",
+            description=f"Your Discord is already linked to **{existing_link['roblox_username']}** (ID: {existing_link['roblox_user_id']})\n\nUse `/unlink` to disconnect the current account first.",
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=embed)
+        return
+    
     # Validate username
     is_valid, error = security.is_valid_username(roblox_username)
     if not is_valid:
@@ -119,6 +130,33 @@ async def verify_account(interaction: discord.Interaction, roblox_username: str)
         "user_id": user_id,
         "expires_at": datetime.utcnow() + timedelta(minutes=10)
     }
+
+
+@bot.tree.command(name="unlink", description="Unlink your Roblox account from Discord")
+async def unlink_account(interaction: discord.Interaction):
+    """Unlink your Roblox account from Discord"""
+    await interaction.response.defer()
+    
+    # Check if user has a linked account
+    discord_user = await db.get_discord_user(interaction.user.id)
+    if not discord_user:
+        embed = discord.Embed(
+            title="❌ Not Linked",
+            description="Your Discord account is not linked to any Roblox account.",
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=embed)
+        return
+    
+    # Remove the link from database
+    await db.unlink_discord_from_roblox(interaction.user.id)
+    
+    embed = discord.Embed(
+        title="✅ Account Unlinked",
+        description=f"Your Roblox account **{discord_user['roblox_username']}** has been unlinked.\n\nYou can now verify a different account with `/verify`.",
+        color=discord.Color.green()
+    )
+    await interaction.followup.send(embed=embed)
 
 
 @bot.tree.command(name="verify-confirm", description="Confirm verification by checking if code is in your Roblox bio")
@@ -411,7 +449,7 @@ async def help_command(interaction: discord.Interaction):
     
     embed.add_field(
         name="🔐 Verification",
-        value="`/verify` - Link your Roblox account\n`/verify-confirm` - Confirm verification",
+        value="`/verify` - Link your Roblox account\n`/verify-confirm` - Confirm verification\n`/unlink` - Unlink your Roblox account",
         inline=False
     )
     
