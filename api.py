@@ -245,6 +245,45 @@ async def complete_deposit(request: DepositRequest):
     }
 
 
+@app.post("/withdraw/method")
+async def get_withdraw_method(request: WithdrawRequest):
+    """
+    Determine if user wants to deposit or withdraw
+    This is called first to check if user is verified and has inventory
+    """
+    # Get Discord user by Roblox ID
+    discord_user = await db.get_discord_user_by_roblox(request.userId)
+    if not discord_user:
+        return {"method": "USERNOTFOUND"}
+    
+    # Get user's inventory
+    inventory = await db.get_inventory(discord_user["discord_id"])
+    gems = await db.get_user_gem_balance(discord_user["discord_id"])
+    
+    # If user has items in inventory, they want to withdraw
+    if inventory or gems > 0:
+        # Convert inventory to pet list format
+        pets = []
+        for inv in inventory:
+            for _ in range(inv["quantity"]):
+                pets.append(inv["pet_name"])
+        
+        return {
+            "method": "Withdraw",
+            "pets": pets,
+            "gems": gems,
+            "code": security.generate_verification_code()[:6]  # Short security code
+        }
+    else:
+        # User has no inventory, they want to deposit
+        return {
+            "method": "Deposit",
+            "pets": [],
+            "gems": 0,
+            "code": security.generate_verification_code()[:6]
+        }
+
+
 @app.post("/withdraw/check")
 async def check_withdraw(request: WithdrawRequest):
     """
