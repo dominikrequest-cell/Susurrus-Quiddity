@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:latest
+    container_name: pet_trading_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - pet_trading_network
+
+  # FastAPI backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: pet_trading_api
+    environment:
+      MONGODB_URL: mongodb://admin:password@mongodb:27017/pet_trading?authSource=admin
+      API_SECRET: ${API_SECRET:-default-secret-key}
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongodb
+    networks:
+      - pet_trading_network
+    restart: unless-stopped
+
+  # Discord bot
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: pet_trading_bot
+    environment:
+      MONGODB_URL: mongodb://admin:password@mongodb:27017/pet_trading?authSource=admin
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      API_SECRET: ${API_SECRET:-default-secret-key}
+      API_URL: http://api:8000
+      LOG_LEVEL: INFO
+    depends_on:
+      - mongodb
+      - api
+    networks:
+      - pet_trading_network
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+
+networks:
+  pet_trading_network:
+    driver: bridge
