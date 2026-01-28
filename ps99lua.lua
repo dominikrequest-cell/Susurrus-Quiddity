@@ -328,33 +328,37 @@ local function GetSupported()
 
 -- Huges
 for index, pet in next, replicatedStorage.__DIRECTORY.Pets.Huge:GetChildren() do
-	local petData = require(pet)
-	table.insert(assetIds, petData.thumbnail)
-	table.insert(assetIds, petData.goldenThumbnail)
-	table.insert(goldAssetids, petData.goldenThumbnail)
-	table.insert(nameAssetIds, {
-		["name"]      = petData.name,
-		["assetIds"]  = {
-			petData.thumbnail,
-			petData.goldenThumbnail
-		}
-	})
-	table.insert(hugesTitanicsIds, petData._id)
+	local success, petData = pcall(function() return require(pet) end)
+	if success and petData then
+		table.insert(assetIds, petData.thumbnail)
+		table.insert(assetIds, petData.goldenThumbnail)
+		table.insert(goldAssetids, petData.goldenThumbnail)
+		table.insert(nameAssetIds, {
+			["name"]      = petData.name,
+			["assetIds"]  = {
+				petData.thumbnail,
+				petData.goldenThumbnail
+			}
+		})
+		table.insert(hugesTitanicsIds, petData._id)
+	end
 end
 -- Titanics
 for index, pet in next, replicatedStorage.__DIRECTORY.Pets.Titanic:GetChildren() do
-	local petData = require(pet)
-	table.insert(assetIds, petData.thumbnail)
-	table.insert(assetIds, petData.goldenThumbnail)
-	table.insert(goldAssetids, petData.goldenThumbnail)
-	table.insert(nameAssetIds, {
-		["name"]      = petData.name,
-		["assetIds"]  = {
-            petData.thumbnail,
-			petData.goldenThumbnail
-		}
-	})
-	table.insert(hugesTitanicsIds, petData._id)
+	local success, petData = pcall(function() return require(pet) end)
+	if success and petData then
+		table.insert(assetIds, petData.thumbnail)
+		table.insert(assetIds, petData.goldenThumbnail)
+		table.insert(goldAssetids, petData.goldenThumbnail)
+		table.insert(nameAssetIds, {
+			["name"]      = petData.name,
+			["assetIds"]  = {
+				petData.thumbnail,
+				petData.goldenThumbnail
+			}
+		})
+		table.insert(hugesTitanicsIds, petData._id)
+	end
 end
 
 --// Trade ID setting
