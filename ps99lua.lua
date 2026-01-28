@@ -319,18 +319,28 @@ local function GetSupported()
       }
     })
   
+    print("GetSupported Status Code:", response.StatusCode)
+    print("GetSupported Response Body:", response.Body)
+    
     if response.StatusCode == 200 then
       local responseBody = httpService:JSONDecode(response.Body)
+      print("Decoded response:", httpService:JSONEncode(responseBody))
       supporteditems = responseBody["items"]
-  
+      
+      print("supporteditems type:", type(supporteditems))
       if supporteditems then
-        print("ITEMS LOADDED")
+        print("supporteditems count:", #supporteditems)
+      end
+  
+      if supporteditems and #supporteditems > 0 then
+        print("ITEMS LOADDED - Count:", #supporteditems)
       else
-        print("no items.")
-        sendMessage("a error was detected.")
+        print("No items returned from API")
+        sendMessage("No supported items configured. Please add items to the system.")
       end
     else
-      sendMessage("a error was detected")
+      print("API returned error status:", response.StatusCode)
+      sendMessage("API connection error. Status: " .. tostring(response.StatusCode))
     end
   end
 

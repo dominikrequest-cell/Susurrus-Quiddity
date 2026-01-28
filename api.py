@@ -319,12 +319,12 @@ async def complete_withdraw(request: WithdrawReplyRequest):
 # ============== Admin/Management Endpoints ==============
 
 @app.get("/items/all")
-async def get_all_items():
+async def get_all_items(game: str = "PS99"):
     """
     Get all supported items and their values
     Called by Lua to validate trades
     """
-    pet_values = await db.get_all_pet_values()
+    pet_values = await db.get_all_pet_values(game)
     
     return {
         "items": list(pet_values.keys()),

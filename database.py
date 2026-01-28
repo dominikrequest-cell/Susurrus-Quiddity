@@ -215,10 +215,10 @@ class Database:
         pet = self.pet_values.find_one({"pet_name": pet_name})
         return pet.get("value") if pet else None
     
-    async def get_all_pet_values(self) -> Dict[str, int]:
-        """Get all pet values"""
-        pets = self.pet_values.find({})
-        return {pet["pet_name"]: pet["value"] for pet in pets}
+    async def get_all_pet_values(self, game: str = "PS99") -> Dict[str, int]:
+        """Get all pet values for a specific game"""
+        pets = self.pet_values.find({"game": game})
+        return {pet["name"]: pet.get("value", 0) for pet in pets}
     
     def close(self):
         """Close database connection"""
