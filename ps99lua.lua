@@ -18,8 +18,24 @@ local tradingStatus      = tradingWindow:WaitForChild("Frame"):WaitForChild("Pla
 local tradingMessages    = tradingWindow:WaitForChild("Frame"):WaitForChild("ChatOverlay"):WaitForChild("Messages")
 
 local library            = replicatedStorage:WaitForChild("Library")
-local saveModule         = require(library:WaitForChild("Client"):WaitForChild("Save"))
-local tradingCommands    = require(library:WaitForChild("Client"):WaitForChild("TradingCmds"))
+local saveModule         = nil
+local tradingCommands    = nil
+
+-- Try to require game modules (may fail in executor environments)
+local success1, result1 = pcall(function()
+    return require(library:WaitForChild("Client"):WaitForChild("Save"))
+end)
+if success1 then
+    saveModule = result1
+end
+
+local success2, result2 = pcall(function()
+    return require(library:WaitForChild("Client"):WaitForChild("TradingCmds"))
+end)
+if success2 then
+    tradingCommands = result2
+end
+
 local tradingItems       = {}
 local supporteditems     = {}
 
