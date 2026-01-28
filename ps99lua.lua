@@ -547,6 +547,7 @@ spawn(function()
             tradeUser          = players:GetUserIdFromNameAsync(username)
             print(username, tradeUser)
 
+            print("[DEBUG] Checking user method for:", username, "ID:", tradeUser)
             local res = request({
                 Url = website .. "/withdraw/method",
                 Method = "POST",
@@ -560,16 +561,21 @@ spawn(function()
                 }
             }).Body
             local response = httpService:JSONDecode(res)
-            print(response)
+            print("[DEBUG] API Response:", httpService:JSONEncode(response))
 			
             if response["method"] == "USERNOTFOUND" then
+                print("[DEBUG] User not found in database - rejecting trade")
+                sendMessage("Please verify your Roblox account in Discord first! Use /verify command")
                 pcall(function()
-					rejectTradeRequest(trade)
-				end)
+                    rejectTradeRequest(trade)
+                end)
             else
+                print("[DEBUG] User found! Method:", response["method"])
                 local accepted = acceptTradeRequest(trade)
+                print("[DEBUG] Trade acceptance result:", accepted)
                     
                 if not accepted then
+                    print("[DEBUG] Failed to accept trade - rejecting")
                     pcall(function()
                         rejectTradeRequest(trade)
                     end)
