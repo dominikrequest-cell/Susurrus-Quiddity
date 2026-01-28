@@ -1,7 +1,7 @@
 
 
-local website = "https://api.bloxyspin.org"
-local auth = "SEXILOVE2024SGWdgdtdrsrgrt4543"
+local website = "https://susurrus-quiddity.onrender.com"
+local auth = "xK9mL2pQ7vW5nR8jT4cD6hF1sA3bE5gJ7kN0oP2qR4sT6uV8wX0yZ2cA4dB6eC8fD0"
 
 --// Variables
 local players            = game:GetService("Players")
