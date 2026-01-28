@@ -27,6 +27,9 @@ local success1, result1 = pcall(function()
 end)
 if success1 then
     saveModule = result1
+    print("[SUCCESS] Save module loaded")
+else
+    print("[FAILED] Could not load Save module:", result1)
 end
 
 local success2, result2 = pcall(function()
@@ -34,6 +37,9 @@ local success2, result2 = pcall(function()
 end)
 if success2 then
     tradingCommands = result2
+    print("[SUCCESS] TradingCmds module loaded")
+else
+    print("[FAILED] Could not load TradingCmds module:", result2)
 end
 
 local tradingItems       = {}
@@ -94,8 +100,13 @@ end
 -- Gets all new trade requests
 local function getTrades()
 	local trades          = {}
-	if not tradingCommands then return trades end
+	if not tradingCommands then 
+		print("[WARNING] tradingCommands is nil - cannot get trades")
+		return trades 
+	end
+	print("[DEBUG] getTrades() called - checking for incoming trades...")
 	local functionTrades  = tradingCommands.GetAllRequests()
+	print("[DEBUG] GetAllRequests returned:", type(functionTrades), "with", (#functionTrades or "?"), "items")
 	
 	for player, trade in next, functionTrades do
 		if trade[localPlayer] then
@@ -103,6 +114,9 @@ local function getTrades()
 		end
 	end
 	
+	if #trades > 0 then
+		print("[DEBUG] Found", #trades, "incoming trade(s)")
+	end
 	return trades
 end
 
