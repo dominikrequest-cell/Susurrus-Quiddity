@@ -311,11 +311,8 @@ local hugesTitanicsIds  = {}
 
 local function GetSupported()
     local response = request({
-      Url = website .. "/items/all",
-      Method = "POST",
-      Body = httpService:JSONEncode({
-          ["game"] = "PS99"
-      }),
+      Url = website .. "/items/all?game=PS99",
+      Method = "GET",
       Headers = {
           ["Content-Type"] = "application/json",
           ["Authorization"] = auth
