@@ -1,10 +1,11 @@
 """
 Discord bot for account verification, inventory management, and trading
-Uses discord.py framework
+Uses discord.py framework with slash commands
 """
 
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 import os
 import httpx
 from datetime import datetime, timedelta
@@ -27,26 +28,28 @@ security = SecurityManager(api_secret=os.getenv("API_SECRET", "default-secret-ke
 
 API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 API_SECRET = os.getenv("API_SECRET", "")
-
-
 # ============== Event Handlers ==============
 
 @bot.event
 async def on_ready():
     """Bot startup"""
     print(f"🤖 {bot.user} is ready!")
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        print(e)
     # Start background tasks
     sync_inventory.start()
 
 
 # ============== Verification Commands ==============
 
-@bot.command(name="verify")
-async def verify_account(ctx, roblox_username: str):
-    """
-    Verify your Roblox account and link it to Discord
-    Usage: !verify YourRobloxUsername
-    """
+@bot.tree.command(name="verify", description="Verify your Roblox account and link it to Discord")
+async def verify_account(interaction: discord.Interaction, roblox_username: str):
+    """Verify your Roblox account and link it to Discord"""
+    await interaction.response.defer()
+    
     # Validate username
     is_valid, error = security.is_valid_username(roblox_username)
     if not is_valid:
@@ -55,7 +58,7 @@ async def verify_account(ctx, roblox_username: str):
             description=error,
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
     # Check if Roblox user exists
@@ -66,7 +69,7 @@ async def verify_account(ctx, roblox_username: str):
             description=f"Could not find Roblox user '{roblox_username}'",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
     # Generate verification code
@@ -90,28 +93,27 @@ async def verify_account(ctx, roblox_username: str):
     )
     embed.add_field(
         name="3️⃣ Confirm verification",
-        value=f"Once done, run: `!verify-confirm {roblox_username}`",
+        value=f"Once done, use `/verify-confirm` and enter: {roblox_username}",
         inline=False
     )
     embed.set_footer(text="Code expires in 10 minutes")
     
     # Send DM
     try:
-        await ctx.author.send(embed=embed)
-        await ctx.send(f"✅ Check your DMs! You'll need to add a code to your Roblox bio to verify.")
+        await interaction.user.send(embed=embed)
+        await interaction.followup.send(f"✅ Check your DMs! You'll need to add a code to your Roblox bio to verify.")
     except discord.Forbidden:
         embed = discord.Embed(
             title="❌ Cannot DM",
             description="Please enable DMs from server members",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
-    # Store code temporarily (in production, use Redis)
-    # For now, store in memory cache with TTL
-    ctx.bot.pending_verifications = getattr(ctx.bot, 'pending_verifications', {})
-    ctx.bot.pending_verifications[ctx.author.id] = {
+    # Store code temporarily
+    bot.pending_verifications = getattr(bot, 'pending_verifications', {})
+    bot.pending_verifications[interaction.user.id] = {
         "code": code,
         "username": roblox_username,
         "user_id": user_id,
@@ -119,34 +121,33 @@ async def verify_account(ctx, roblox_username: str):
     }
 
 
-@bot.command(name="verify-confirm")
-async def verify_confirm(ctx, roblox_username: str):
-    """
-    Confirm verification by checking if code is in your Roblox bio
-    Usage: !verify-confirm YourRobloxUsername
-    """
+@bot.tree.command(name="verify-confirm", description="Confirm verification by checking if code is in your Roblox bio")
+async def verify_confirm(interaction: discord.Interaction, roblox_username: str):
+    """Confirm verification by checking if code is in your Roblox bio"""
+    await interaction.response.defer()
+    
     # Get pending verification
-    pending = getattr(ctx.bot, 'pending_verifications', {})
-    if ctx.author.id not in pending:
+    pending = getattr(bot, 'pending_verifications', {})
+    if interaction.user.id not in pending:
         embed = discord.Embed(
             title="❌ No Pending Verification",
-            description="Run `!verify <username>` first",
+            description="Run `/verify` first",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
-    verification = pending[ctx.author.id]
+    verification = pending[interaction.user.id]
     
     # Check if expired
     if datetime.utcnow() > verification["expires_at"]:
-        del pending[ctx.author.id]
+        del pending[interaction.user.id]
         embed = discord.Embed(
             title="❌ Verification Expired",
-            description="Please run `!verify` again",
+            description="Please run `/verify` again",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
     # Check if code is in user's bio
@@ -162,18 +163,18 @@ async def verify_confirm(ctx, roblox_username: str):
             description=f"Could not find the verification code in your Roblox bio.\nMake sure you added:\n```{code}```",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
     # Link accounts
     await db.link_discord_to_roblox(
-        discord_id=ctx.author.id,
+        discord_id=interaction.user.id,
         roblox_user_id=user_id,
-        discord_username=str(ctx.author)
+        discord_username=str(interaction.user)
     )
     
     # Clean up
-    del pending[ctx.author.id]
+    del pending[interaction.user.id]
     
     # Get avatar thumbnail
     thumbnail = await roblox.get_user_thumbnail(user_id, fresh=True)
@@ -188,34 +189,33 @@ async def verify_confirm(ctx, roblox_username: str):
         embed.set_thumbnail(url=thumbnail)
     embed.add_field(
         name="Next Steps",
-        value="You can now deposit/withdraw pets using `/deposit` and `/withdraw` commands!",
+        value="You can now use `/deposit` and `/withdraw` commands!",
         inline=False
     )
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 # ============== Inventory Commands ==============
 
-@bot.command(name="inventory")
-async def show_inventory(ctx):
-    """
-    Show your pet inventory
-    Usage: !inventory
-    """
+@bot.tree.command(name="inventory", description="Show your pet inventory")
+async def show_inventory(interaction: discord.Interaction):
+    """Show your pet inventory"""
+    await interaction.response.defer()
+    
     # Get Discord user link
-    discord_user = await db.get_discord_user(ctx.author.id)
+    discord_user = await db.get_discord_user(interaction.user.id)
     if not discord_user:
         embed = discord.Embed(
             title="❌ Not Verified",
-            description="Please verify your account first with `!verify <username>`",
+            description="Please verify your account first with `/verify`",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
     # Get inventory
-    inventory = await db.get_inventory(ctx.author.id)
-    gems = await db.get_user_gem_balance(ctx.author.id)
+    inventory = await db.get_inventory(interaction.user.id)
+    gems = await db.get_user_gem_balance(interaction.user.id)
     
     # Build inventory embed
     embed = discord.Embed(
@@ -245,52 +245,49 @@ async def show_inventory(ctx):
     )
     
     embed.set_footer(text=f"Last updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
-@bot.command(name="balance")
-async def check_balance(ctx):
-    """
-    Check your gem balance
-    Usage: !balance
-    """
-    discord_user = await db.get_discord_user(ctx.author.id)
+@bot.tree.command(name="balance", description="Check your gem balance")
+async def check_balance(interaction: discord.Interaction):
+    """Check your gem balance"""
+    await interaction.response.defer()
+    
+    discord_user = await db.get_discord_user(interaction.user.id)
     if not discord_user:
         embed = discord.Embed(
             title="❌ Not Verified",
             description="Please verify your account first",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
-    gems = await db.get_user_gem_balance(ctx.author.id)
+    gems = await db.get_user_gem_balance(interaction.user.id)
     
     embed = discord.Embed(
         title="💎 Your Gem Balance",
         description=f"{gems:,} gems",
         color=discord.Color.gold()
     )
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 # ============== Trade Commands ==============
 
-@bot.command(name="deposit")
-async def initiate_deposit(ctx):
-    """
-    Start a deposit (send pets/gems to bot)
-    You'll need to join the Roblox game and trade the bot
-    Usage: !deposit
-    """
-    discord_user = await db.get_discord_user(ctx.author.id)
+@bot.tree.command(name="deposit", description="Start a deposit (send pets/gems to bot)")
+async def initiate_deposit(interaction: discord.Interaction):
+    """Start a deposit (send pets/gems to bot)"""
+    await interaction.response.defer()
+    
+    discord_user = await db.get_discord_user(interaction.user.id)
     if not discord_user:
         embed = discord.Embed(
             title="❌ Not Verified",
             description="Please verify your account first",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
     embed = discord.Embed(
@@ -318,23 +315,22 @@ async def initiate_deposit(ctx):
         value="• Only Huge and Titanic pets\n• Minimum 50M gems per deposit\n• Maximum 10B gems per deposit\n• Gems must be in 50M blocks",
         inline=False
     )
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
-@bot.command(name="withdraw")
-async def initiate_withdraw(ctx):
-    """
-    Start a withdrawal (get pets/gems from bot)
-    Usage: !withdraw <pet1> <pet2> ...
-    """
-    discord_user = await db.get_discord_user(ctx.author.id)
+@bot.tree.command(name="withdraw", description="Start a withdrawal (get pets/gems from bot)")
+async def initiate_withdraw(interaction: discord.Interaction):
+    """Start a withdrawal (get pets/gems from bot)"""
+    await interaction.response.defer()
+    
+    discord_user = await db.get_discord_user(interaction.user.id)
     if not discord_user:
         embed = discord.Embed(
             title="❌ Not Verified",
             description="Please verify your account first",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
     embed = discord.Embed(
@@ -357,28 +353,27 @@ async def initiate_withdraw(ctx):
         value="The bot will send your requested pets. Accept to complete!",
         inline=False
     )
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 
 # ============== Transaction History ==============
 
-@bot.command(name="history")
-async def transaction_history(ctx, limit: int = 10):
-    """
-    Show your transaction history
-    Usage: !history [limit]
-    """
-    discord_user = await db.get_discord_user(ctx.author.id)
+@bot.tree.command(name="history", description="Show your transaction history")
+async def transaction_history(interaction: discord.Interaction, limit: int = 10):
+    """Show your transaction history"""
+    await interaction.response.defer()
+    
+    discord_user = await db.get_discord_user(interaction.user.id)
     if not discord_user:
         embed = discord.Embed(
             title="❌ Not Verified",
             description="Please verify your account first",
             color=discord.Color.red()
         )
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         return
     
-    transactions = await db.get_user_transactions(ctx.author.id, limit)
+    transactions = await db.get_user_transactions(interaction.user.id, limit)
     
     embed = discord.Embed(
         title="📜 Transaction History",
@@ -400,7 +395,45 @@ async def transaction_history(ctx, limit: int = 10):
                 inline=False
             )
     
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
+
+
+@bot.tree.command(name="help", description="Show all available commands")
+async def help_command(interaction: discord.Interaction):
+    """Show all available commands"""
+    await interaction.response.defer()
+    
+    embed = discord.Embed(
+        title="🤖 Pet Trading Bot",
+        description="Slash commands for managing your Roblox pet inventory",
+        color=discord.Color.blurple()
+    )
+    
+    embed.add_field(
+        name="🔐 Verification",
+        value="`/verify` - Link your Roblox account\n`/verify-confirm` - Confirm verification",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📊 Inventory",
+        value="`/inventory` - Show your pets and gems\n`/balance` - Check gem balance",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="💱 Trading",
+        value="`/deposit` - Deposit pets/gems to bot\n`/withdraw` - Withdraw pets from bot",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📜 History",
+        value="`/history [limit]` - Show transaction history",
+        inline=False
+    )
+    
+    await interaction.followup.send(embed=embed)
 
 
 # ============== Background Tasks ==============
@@ -408,57 +441,23 @@ async def transaction_history(ctx, limit: int = 10):
 @tasks.loop(minutes=5)
 async def sync_inventory():
     """Periodically sync inventory from trades"""
-    # In production, would fetch completed trades from API
-    # and update Discord user inventories
     print("Syncing inventory...")
 
 
-@bot.command(name="help")
-async def help_command(ctx):
-    """Show all available commands"""
-    embed = discord.Embed(
-        title="🤖 Pet Trading Bot",
-        description="Commands for managing your Roblox pet inventory",
-        color=discord.Color.blurple()
-    )
-    
-    embed.add_field(
-        name="🔐 Verification",
-        value="`!verify <username>` - Link your Roblox account\n`!verify-confirm <username>` - Confirm verification",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📊 Inventory",
-        value="`!inventory` - Show your pets and gems\n`!balance` - Check gem balance",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="💱 Trading",
-        value="`!deposit` - Deposit pets/gems to bot\n`!withdraw` - Withdraw pets from bot",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📜 History",
-        value="`!history [limit]` - Show transaction history",
-        inline=False
-    )
-    
-    await ctx.send(embed=embed)
-
-
 # Error handler
-@bot.event
-async def on_command_error(ctx, error):
-    """Handle command errors"""
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Handle slash command errors"""
     embed = discord.Embed(
         title="❌ Error",
         description=str(error),
         color=discord.Color.red()
     )
-    await ctx.send(embed=embed)
+    
+    if interaction.response.is_done():
+        await interaction.followup.send(embed=embed)
+    else:
+        await interaction.response.send_message(embed=embed)
 
 
 if __name__ == "__main__":
