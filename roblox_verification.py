@@ -118,13 +118,32 @@ class RobloxVerification:
     async def _get_roblox_user_info(self, username: str) -> Optional[Dict]:
         """Fetch user info from Roblox API by username"""
         try:
+            # Use the v1 users endpoint with search
             response = await self.client.get(
-                f"{self.ROBLOX_API_BASE}/users/get-by-username",
-                params={"username": username}
+                f"{self.ROBLOX_USERS_API}/search/search-suggestions",
+                params={
+                    "keyword": username,
+                    "limit": 10
+                }
             )
             data = response.json()
-            if "Id" in data:
-                return data
+            
+            # Search through suggestions for exact match
+            if "suggestions" in data:
+                for suggestion in data["suggestions"]:
+                    if suggestion.get("name", "").lower() == username.lower():
+                        # Found exact match, now fetch full user info
+                        user_id = suggestion.get("id")
+                        if user_id:
+                            full_info = await self._get_roblox_user_by_id(user_id)
+                            if full_info:
+                                # Convert to old format for compatibility
+                                return {
+                                    "Id": full_info.get("id"),
+                                    "Username": full_info.get("name")
+                                }
+            
+            return None
         except Exception as e:
             print(f"Error fetching user info for {username}: {e}")
         return None
