@@ -10,6 +10,9 @@ import os
 import httpx
 from datetime import datetime, timedelta
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from database import Database
 from roblox_verification import RobloxVerification

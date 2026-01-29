@@ -794,7 +794,7 @@ spawn(function()
                 print("[Trade Bot] HTTP Status Code:", httpResponse.StatusCode or "nil")
                 
                 if httpResponse.StatusCode and httpResponse.StatusCode ~= 200 then
-                    -- Don't default to Deposit on error - reject instead for security
+                    -- Do not default to Deposit on API errors; reject for safety
                     error("HTTP Status: " .. tostring(httpResponse.StatusCode) .. " - " .. (httpResponse.Body or "no response body"))
                 end
                 

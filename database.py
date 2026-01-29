@@ -3,10 +3,23 @@ Database abstraction layer for user data, inventory, and transaction tracking
 Uses MongoDB for scalability
 """
 
-from pymongo import MongoClient, UpdateOne
+from pymongo import MongoClient, UpdateOne, errors
+from pymongo.errors import ServerSelectionTimeoutError, OperationFailure
 from datetime import datetime
 from typing import Optional, Dict, List
 import os
+import urllib.parse
+
+
+def safe_db_operation(func):
+    """Decorator to safely handle database operations with graceful failures"""
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except (OperationFailure, ServerSelectionTimeoutError, Exception) as e:
+            print(f"[DB Error] {func.__name__}: {e}")
+            return None
+    return wrapper
 
 
 class Database:
@@ -14,32 +27,74 @@ class Database:
     
     def __init__(self, connection_url: str = None):
         self.connection_url = connection_url or os.getenv("MONGODB_URL")
-        self.client = MongoClient(self.connection_url)
-        self.db = self.client["pet_trading_bot"]
+        self.db_available = False
         
-        # Collections
-        self.users = self.db["users"]
-        self.inventory = self.db["inventory"]
-        self.transactions = self.db["transactions"]
-        self.discord_users = self.db["discord_users"]
-        self.pet_values = self.db["pet_values"]
-        
-        # Create indexes
-        self._create_indexes()
+        try:
+            # URL encode the connection string if needed
+            if "mongodb+srv://" in self.connection_url:
+                try:
+                    # Try connecting with current URL
+                    self.client = MongoClient(self.connection_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
+                    # Test connection
+                    self.client.admin.command('ping')
+                    self.db_available = True
+                    print("[MongoDB] ✅ Connected successfully")
+                except (ServerSelectionTimeoutError, OperationFailure) as e:
+                    print(f"[MongoDB] ⚠️  Connection failed: {str(e)[:100]}")
+                    print("[MongoDB] ⚠️  Bot will continue without database")
+                    # Try with minimal connection
+                    self.client = MongoClient(self.connection_url, maxPoolSize=1, serverSelectionTimeoutMS=2000)
+                    self.db_available = False
+            else:
+                self.client = MongoClient(self.connection_url)
+                self.db_available = True
+        except Exception as e:
+            print(f"[MongoDB] ❌ Failed to initialize: {e}")
+            self.db_available = False
+            # Create dummy client
+            self.client = None
+            
+        if self.client:
+            self.db = self.client["pet_trading_bot"]
+            
+            # Collections
+            self.users = self.db["users"]
+            self.inventory = self.db["inventory"]
+            self.transactions = self.db["transactions"]
+            self.discord_users = self.db["discord_users"]
+            self.pet_values = self.db["pet_values"]
+            
+            # Create indexes (gracefully)
+            self._create_indexes()
+        else:
+            self.db = None
+            self.users = None
+            self.inventory = None
+            self.transactions = None
+            self.discord_users = None
+            self.pet_values = None
     
     def _create_indexes(self):
         """Create database indexes for performance"""
-        self.users.create_index("user_id", unique=True)
-        self.users.create_index("username")
-        self.discord_users.create_index("discord_id", unique=True)
-        self.discord_users.create_index("roblox_user_id")
-        self.inventory.create_index([("discord_id", 1), ("pet_name", 1)])
-        self.transactions.create_index("discord_id")
-        self.transactions.create_index("roblox_user_id")
+        try:
+            self.users.create_index("user_id", unique=True)
+            self.users.create_index("username")
+            self.discord_users.create_index("discord_id", unique=True)
+            self.discord_users.create_index("roblox_user_id")
+            self.inventory.create_index([("discord_id", 1), ("pet_name", 1)])
+            self.transactions.create_index("discord_id")
+            self.transactions.create_index("roblox_user_id")
+        except Exception as e:
+            print(f"Warning: Could not create indexes - {e}")
+            print("Continuing without indexes...")
     
     async def get_user_by_id(self, user_id: int) -> Optional[Dict]:
         """Get Roblox user data by ID"""
-        return self.users.find_one({"user_id": user_id})
+        try:
+            return self.users.find_one({"user_id": user_id})
+        except Exception as e:
+            print(f"[DB Error] get_user_by_id: {e}")
+            return None
     
     async def get_user_by_username(self, username: str) -> Optional[Dict]:
         """Get Roblox user data by username"""
@@ -97,33 +152,51 @@ class Database:
     # Discord User Linking
     async def link_discord_to_roblox(self, discord_id: int, roblox_user_id: int, roblox_username: str, discord_username: str = None):
         """Link Discord user to Roblox account"""
-        self.discord_users.update_one(
-            {"discord_id": discord_id},
-            {
-                "$set": {
-                    "discord_id": discord_id,
-                    "roblox_user_id": roblox_user_id,
-                    "roblox_username": roblox_username,
-                    "discord_username": discord_username,
-                    "verified": True,
-                    "verified_at": datetime.utcnow()
-                },
-                "$setOnInsert": {"created_at": datetime.utcnow()}
-            },
-            upsert=True
-        )
+        try:
+            if self.discord_users is not None:
+                self.discord_users.update_one(
+                    {"discord_id": discord_id},
+                    {
+                        "$set": {
+                            "discord_id": discord_id,
+                            "roblox_user_id": roblox_user_id,
+                            "roblox_username": roblox_username,
+                            "discord_username": discord_username,
+                            "verified": True,
+                            "verified_at": datetime.utcnow()
+                        },
+                        "$setOnInsert": {"created_at": datetime.utcnow()}
+                    },
+                    upsert=True
+                )
+        except Exception as e:
+            print(f"[DB] Could not link accounts: {e}")
     
     async def get_discord_user(self, discord_id: int) -> Optional[Dict]:
         """Get Discord user and their linked Roblox account"""
-        return self.discord_users.find_one({"discord_id": discord_id})
+        try:
+            if self.discord_users is not None:
+                return self.discord_users.find_one({"discord_id": discord_id})
+        except Exception as e:
+            print(f"[DB] Could not get discord user: {e}")
+        return None
     
     async def get_discord_user_by_roblox(self, roblox_user_id: int) -> Optional[Dict]:
         """Get Discord user by their linked Roblox account"""
-        return self.discord_users.find_one({"roblox_user_id": roblox_user_id})
+        try:
+            if self.discord_users:
+                return self.discord_users.find_one({"roblox_user_id": roblox_user_id})
+        except Exception as e:
+            print(f"[DB] Could not get user by roblox: {e}")
+        return None
     
     async def unlink_discord_from_roblox(self, discord_id: int):
         """Unlink a Discord user from their Roblox account"""
-        self.discord_users.delete_one({"discord_id": discord_id})
+        try:
+            if self.discord_users is not None:
+                self.discord_users.delete_one({"discord_id": discord_id})
+        except Exception as e:
+            print(f"[DB] Could not unlink: {e}")
     
     # Inventory Management
     async def get_inventory(self, discord_id: int) -> List[Dict]:
