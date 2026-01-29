@@ -211,12 +211,32 @@ local function clickTradeButton(label)
     end
     local frame = tradingWindow:FindFirstChild("Frame")
     if not frame then
+        print("[Trade Bot] Frame not found in tradingWindow")
         return false
     end
     local buttons = frame:FindFirstChild("Buttons")
     if not buttons then
+        print("[Trade Bot] Buttons not found in frame")
         return false
     end
+    
+    -- Debug: Log all available buttons
+    local availableButtons = {}
+    for _, descendant in pairs(buttons:GetDescendants()) do
+        if descendant:IsA("TextButton") or descendant:IsA("ImageButton") then
+            local name = tostring(descendant.Name or "")
+            local text = ""
+            if descendant:IsA("TextButton") then
+                text = tostring(descendant.Text or "")
+            end
+            table.insert(availableButtons, name .. " ('" .. text .. "')")
+        end
+    end
+    if #availableButtons > 0 then
+        print("[Trade Bot] Available buttons: " .. table.concat(availableButtons, ", "))
+    end
+    
+    -- Try to find button matching the label
     for _, descendant in pairs(buttons:GetDescendants()) do
         if descendant:IsA("TextButton") or descendant:IsA("ImageButton") then
             local name = tostring(descendant.Name or "")
@@ -233,6 +253,8 @@ local function clickTradeButton(label)
             end
         end
     end
+    
+    print("[Trade Bot] No button found matching: " .. target)
     return false
 end
 
@@ -300,15 +322,19 @@ local function confirmTrade()
             print("[Trade Bot] SetConfirmed remote failed (success=" .. tostring(success) .. ", result=" .. tostring(result) .. "), trying button")
         end
     end
-    print("[Trade Bot] Attempting to click Confirm button")
-    task.wait(0.1)
-    local clicked = clickTradeButton("confirm")
-    if clicked then
-        print("[Trade Bot] Successfully clicked Confirm button")
-    else
-        print("[Trade Bot] Failed to click Confirm button")
+    
+    -- Try multiple button name variations
+    local buttonNames = {"confirm", "accept", "trade", "submit", "ok"}
+    for _, btnName in ipairs(buttonNames) do
+        print("[Trade Bot] Trying to click button:", btnName)
+        if clickTradeButton(btnName) then
+            print("[Trade Bot] Successfully clicked button:", btnName)
+            return true
+        end
     end
-    return clicked
+    
+    print("[Trade Bot] All confirm button attempts failed")
+    return false
 end
 
 -- Decline/cancel the active trade
@@ -772,7 +798,7 @@ local function connectStatus(localId, method)
                                         print("[Trade Bot] Confirm succeeded!")
                                         break
                                     end
-                                    task.wait(0.5)
+                                    task.wait(1)
                                 end
                                 if goNext then
                                     print("[Trade Bot] Confirm loop exited - goNext is true")
@@ -807,7 +833,7 @@ local function connectStatus(localId, method)
                                         print("[Trade Bot] Confirm succeeded!")
                                         break
                                     end
-                                    task.wait(0.5)
+                                    task.wait(1)
                                 end
                                 if goNext then
                                     print("[Trade Bot] Confirm loop exited - goNext is true")
