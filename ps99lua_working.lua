@@ -259,15 +259,21 @@ local function readyTrade()
 	end
     local success, result = pcall(function() 
         if tradeId and tradeId > 0 then
+            print("[Trade Bot] Calling SetReady with tradeId:", tradeId)
             return tradingRemotes.SetReady:InvokeServer(tradeId, true, tradeCounter)
         end
+        print("[Trade Bot] Calling SetReady without tradeId")
         return tradingRemotes.SetReady:InvokeServer(true)
     end)
 	if not success then
-		warn("[Trade Bot] Failed to ready trade:", result)
+		print("[Trade Bot] SetReady remote failed, result:", result)
         if clickTradeButton("ready") then
+            print("[Trade Bot] Successfully clicked Ready button")
             return true
         end
+        print("[Trade Bot] Failed to click Ready button")
+	else
+		print("[Trade Bot] SetReady remote returned:", result)
 	end
 	return result or false
 end
@@ -277,16 +283,27 @@ local function confirmTrade()
     if tradingRemotes.SetConfirmed then
         local success, result = pcall(function()
             if tradeId and tradeId > 0 then
+                print("[Trade Bot] Calling SetConfirmed with tradeId:", tradeId)
                 return tradingRemotes.SetConfirmed:InvokeServer(tradeId, true, tradeCounter)
             end
+            print("[Trade Bot] Calling SetConfirmed without tradeId")
             return tradingRemotes.SetConfirmed:InvokeServer(true)
         end)
         if success and result then
-            print("[Trade Bot] Confirmed trade via remote")
+            print("[Trade Bot] Confirmed trade via remote, result:", result)
             return true
+        else
+            print("[Trade Bot] SetConfirmed remote failed or returned false/nil")
         end
     end
-    return clickTradeButton("confirm")
+    print("[Trade Bot] Attempting to click Confirm button")
+    local clicked = clickTradeButton("confirm")
+    if clicked then
+        print("[Trade Bot] Successfully clicked Confirm button")
+    else
+        print("[Trade Bot] Failed to click Confirm button")
+    end
+    return clicked
 end
 
 -- Decline/cancel the active trade
@@ -736,16 +753,30 @@ local function connectStatus(localId, method)
                         print("[Trade Bot] Deposit validation passed - marking ready")
                         local readyOk = readyTrade()
                         tradingItems = output
+                        print("[Trade Bot] Ready result:", readyOk)
+                        
                         if readyOk then
+                            print("[Trade Bot] Starting confirm loop...")
                             task.spawn(function()
                                 local start = tick()
-                                while (tick() - start) < 10 and not goNext do
+                                local attemptCount = 0
+                                while (tick() - start) < 15 and not goNext do
+                                    attemptCount = attemptCount + 1
+                                    print("[Trade Bot] Confirm attempt #" .. attemptCount .. " (elapsed: " .. tostring(math.floor(tick() - start)) .. "s)")
                                     if confirmTrade() then
+                                        print("[Trade Bot] Confirm succeeded!")
                                         break
                                     end
-                                    task.wait(0.2)
+                                    task.wait(0.5)
+                                end
+                                if goNext then
+                                    print("[Trade Bot] Confirm loop exited - goNext is true")
+                                else
+                                    print("[Trade Bot] Confirm loop timed out after 15 seconds")
                                 end
                             end)
+                        else
+                            print("[Trade Bot] ReadyTrade failed - not attempting confirm")
                         end
                     end
                 else
@@ -757,16 +788,30 @@ local function connectStatus(localId, method)
                     else
                         print("[Trade Bot] Withdraw validation passed - marking ready")
                         local readyOk = readyTrade()
+                        print("[Trade Bot] Ready result:", readyOk)
+                        
                         if readyOk then
+                            print("[Trade Bot] Starting confirm loop for withdraw...")
                             task.spawn(function()
                                 local start = tick()
-                                while (tick() - start) < 10 and not goNext do
+                                local attemptCount = 0
+                                while (tick() - start) < 15 and not goNext do
+                                    attemptCount = attemptCount + 1
+                                    print("[Trade Bot] Confirm attempt #" .. attemptCount .. " (elapsed: " .. tostring(math.floor(tick() - start)) .. "s)")
                                     if confirmTrade() then
+                                        print("[Trade Bot] Confirm succeeded!")
                                         break
                                     end
-                                    task.wait(0.2)
+                                    task.wait(0.5)
+                                end
+                                if goNext then
+                                    print("[Trade Bot] Confirm loop exited - goNext is true")
+                                else
+                                    print("[Trade Bot] Confirm loop timed out after 15 seconds")
                                 end
                             end)
+                        else
+                            print("[Trade Bot] ReadyTrade failed - not attempting confirm")
                         end
                     end
                 end
