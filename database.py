@@ -197,6 +197,20 @@ class Database:
                 self.discord_users.delete_one({"discord_id": discord_id})
         except Exception as e:
             print(f"[DB] Could not unlink: {e}")
+
+    async def set_withdraw_pending(self, discord_id: int, pending: bool):
+        """Mark whether a user has a pending withdraw request"""
+        try:
+            if self.discord_users is not None:
+                update = {"pending_withdraw": pending, "pending_withdraw_at": datetime.utcnow()}
+                if not pending:
+                    update["pending_withdraw_at"] = None
+                self.discord_users.update_one(
+                    {"discord_id": discord_id},
+                    {"$set": update}
+                )
+        except Exception as e:
+            print(f"[DB] Could not update withdraw pending: {e}")
     
     # Inventory Management
     async def get_inventory(self, discord_id: int) -> List[Dict]:

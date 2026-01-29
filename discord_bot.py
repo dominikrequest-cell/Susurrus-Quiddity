@@ -377,6 +377,9 @@ async def initiate_withdraw(interaction: discord.Interaction):
         )
         await interaction.followup.send(embed=embed)
         return
+
+    # Mark withdraw as pending so the game bot will serve items
+    await db.set_withdraw_pending(interaction.user.id, True)
     
     embed = discord.Embed(
         title="🎁 Withdrawal Instructions",

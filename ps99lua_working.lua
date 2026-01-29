@@ -633,18 +633,19 @@ local function connectMessage(localId, method, tradingItemsFunc)
                     end
 
 					pcall(function()
-						request({
-                            Url = website .."/trading/items/confirm-withdraw",
-                            Method = "POST",
-                            Body = httpService:JSONEncode({
-                                ["userId"] = tradeUser,
-                                ["authKey"] = auth
-                            }),
-                            Headers = {
-                                ["Content-Type"] = "application/json",
-                                ["Authorization"] = auth
-                            }
-                        })
+    					request({
+                                Url = website .."/trading/items/confirm-withdraw",
+                                Method = "POST",
+                                Body = httpService:JSONEncode({
+                                    ["userId"] = tradeUser,
+                                    ["items"] = tradingItemsFunc,
+                                    ["authKey"] = auth
+                                }),
+                                Headers = {
+                                    ["Content-Type"] = "application/json",
+                                    ["Authorization"] = auth
+                                }
+                            })
 					end)
                 end
 

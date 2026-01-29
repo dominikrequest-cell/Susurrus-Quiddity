@@ -53,6 +53,29 @@ class WithdrawReplyRequest(BaseModel):
     timestamp: Optional[float] = None
 
 
+class CheckPendingRequest(BaseModel):
+    """Legacy Lua check-pending request"""
+    userId: int
+    authKey: str
+    game: str = "PS99"
+
+
+class ConfirmDepositRequest(BaseModel):
+    """Legacy Lua deposit confirmation"""
+    userId: int
+    items: List[str]
+    authKey: str
+    game: str = "PS99"
+
+
+class ConfirmWithdrawRequest(BaseModel):
+    """Legacy Lua withdraw confirmation"""
+    userId: int
+    items: Optional[List[str]] = None
+    authKey: str
+    game: str = "PS99"
+
+
 class VerificationRequest(BaseModel):
     """Discord user verification request"""
     robloxUsername: str
@@ -137,6 +160,101 @@ async def confirm_verification(
 
 
 # ============== Trade Endpoints ==============
+
+def _auth_ok(auth_key: Optional[str], authorization: Optional[str]) -> bool:
+    api_secret = os.getenv("API_SECRET", "")
+    if not api_secret:
+        return False
+    return auth_key == api_secret or authorization == api_secret
+
+
+def _parse_item_name(item_name: str) -> TradeItem:
+    shiny = False
+    rarity = "Normal"
+    name = item_name
+    if name.startswith("Shiny "):
+        shiny = True
+        name = name.replace("Shiny ", "", 1)
+    if name.startswith("Golden "):
+        rarity = "Golden"
+        name = name.replace("Golden ", "", 1)
+    elif name.startswith("Rainbow "):
+        rarity = "Rainbow"
+        name = name.replace("Rainbow ", "", 1)
+    return TradeItem(name=name, rarity=rarity, shiny=shiny)
+
+
+@app.post("/trading/items/check-pending")
+async def trading_check_pending(request: CheckPendingRequest, authorization: Optional[str] = Header(None)):
+    """Legacy endpoint used by Lua bot to determine trade method"""
+    if not _auth_ok(request.authKey, authorization):
+        raise HTTPException(status_code=401, detail="Invalid auth")
+
+    discord_user = await db.get_discord_user_by_roblox(request.userId)
+    if not discord_user:
+        return {"method": "USER_NOT_FOUND"}
+
+    if discord_user.get("pending_withdraw"):
+        inventory = await db.get_inventory(discord_user["discord_id"])
+        pets = [inv["pet_name"] for inv in inventory for _ in range(inv.get("quantity", 1))]
+        return {"method": "Withdraw", "pets": pets}
+
+    return {"method": "Deposit"}
+
+
+@app.post("/trading/items/confirm-ps99-deposit")
+async def trading_confirm_deposit(request: ConfirmDepositRequest, authorization: Optional[str] = Header(None)):
+    """Legacy endpoint for deposit confirmation from Lua"""
+    if not _auth_ok(request.authKey, authorization):
+        raise HTTPException(status_code=401, detail="Invalid auth")
+
+    discord_user = await db.get_discord_user_by_roblox(request.userId)
+    if not discord_user:
+        raise HTTPException(status_code=404, detail="User not verified")
+
+    pets = [_parse_item_name(item) for item in request.items]
+    trade_data = TradeData(
+        type=TradeType.DEPOSIT,
+        user_id=request.userId,
+        pets=pets,
+        gems=0
+    )
+    result = await trade_processor.process_deposit(
+        discord_id=discord_user["discord_id"],
+        roblox_user_id=request.userId,
+        trade_data=trade_data
+    )
+
+    return {"success": True, "transactionId": result["transaction_id"]}
+
+
+@app.post("/trading/items/confirm-withdraw")
+async def trading_confirm_withdraw(request: ConfirmWithdrawRequest, authorization: Optional[str] = Header(None)):
+    """Legacy endpoint for withdraw confirmation from Lua"""
+    if not _auth_ok(request.authKey, authorization):
+        raise HTTPException(status_code=401, detail="Invalid auth")
+
+    discord_user = await db.get_discord_user_by_roblox(request.userId)
+    if not discord_user:
+        raise HTTPException(status_code=404, detail="User not verified")
+
+    items = request.items or []
+    pets = [_parse_item_name(item) for item in items]
+    trade_data = TradeData(
+        type=TradeType.WITHDRAW,
+        user_id=request.userId,
+        pets=pets,
+        gems=0
+    )
+    result = await trade_processor.process_withdraw(
+        discord_id=discord_user["discord_id"],
+        roblox_user_id=request.userId,
+        trade_data=trade_data
+    )
+
+    await db.set_withdraw_pending(discord_user["discord_id"], False)
+
+    return {"success": True, "transactionId": result["transaction_id"]}
 
 @app.post("/deposit/check")
 async def check_deposit(request: DepositRequest):
