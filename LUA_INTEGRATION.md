@@ -1,4 +1,4 @@
-"""
+Cannot be blank"""
 Integration guide for connecting the Lua script to the Python backend
 This shows how ps99lua.lua should be updated to use the new API
 """

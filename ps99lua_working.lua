@@ -1,5 +1,5 @@
 --// Configuration
-local website = "https://susurrus-quiddity.onrender.com/"
+local website = "https://susurrus-quiddity.onrender.com"
 local auth = "xK9mL2pQ7vW5nR8jT4cD6hF1sA3bE5gJ7kN0oP2qR4sT6uV8wX0yZ2cA4dB6eC8fD0"
 
 --// Variables
@@ -86,16 +86,40 @@ pcall(function()
     print("[Trade Bot] Monitoring TradeWindow.Enabled property")
 end)
 
+-- DECLARE VARIABLES FIRST
 local tradeId            = 0
+local tradeCounter       = nil
 local startTick          = tick()
-
 local tradeUser          = nil
 local goNext             = true
+local tradeActive        = false
+
+-- Listen for the actual Trade Created event to capture the REAL trade ID
+local tradeCreatedEvent = network:FindFirstChild("Trading: Created")
+if tradeCreatedEvent and tradeCreatedEvent:IsA("RemoteEvent") then
+    tradeCreatedEvent.OnClientEvent:Connect(function(serverTradeId, player1, player2, tradeData)
+        local p1Name = player1 and player1.Name or "?"
+        local p2Name = player2 and player2.Name or "?"
+        print("[Trade Bot] Trade Created! Server Trade ID:", serverTradeId, "Players:", p1Name, p2Name)
+        tradeId = serverTradeId
+        tradeCounter = nil
+        if type(tradeData) == "table" then
+            tradeCounter = tradeData._counter or tradeData.counter
+        end
+        if tradeCounter ~= nil then
+            print("[Trade Bot] Trade counter captured:", tradeCounter)
+        end
+    end)
+    print("[Trade Bot] Listening for Trading: Created events to capture real trade ID")
+end
 
 --// Initializing
 print("[RBXTide Trade Bot] initializing variables...")
 
 local request = request or http_request or http.request
+if not request then
+    warn("[RBXTide Trade Bot] WARNING: HTTP request function not found. Bot will not work!")
+end
 
 --// Functions
 print("[RBXTide Trade Bot] initializing functions...")
@@ -158,14 +182,8 @@ end
 
 -- Returns unique ID if in a trade (checks if trade window is open)
 local function getTradeId()
-	local success, result = pcall(function() 
-		if tradingWindow and tradingWindow.Enabled then
-			-- Use current timestamp as unique trade ID
-			return tick()
-		end
-		return 0
-	end)
-	return result or 0
+	-- Return the server-assigned trade ID captured from Trading: Created event
+	return tradeId or 0
 end
 
 -- Accept trade request from player
@@ -179,8 +197,43 @@ local function acceptTradeRequest(player)
 	end)
 	if not success then
 		warn("[Trade Bot] Failed to accept trade request:", result)
+		return false
 	end
-	return result or false
+	print("[Trade Bot] Successfully accepted trade request from:", player.Name)
+	return true
+end
+
+-- Click a trade button by label (Ready/Confirm) from the trade UI
+local function clickTradeButton(label)
+    local target = string.lower(tostring(label or ""))
+    if target == "" then
+        return false
+    end
+    local frame = tradingWindow:FindFirstChild("Frame")
+    if not frame then
+        return false
+    end
+    local buttons = frame:FindFirstChild("Buttons")
+    if not buttons then
+        return false
+    end
+    for _, descendant in pairs(buttons:GetDescendants()) do
+        if descendant:IsA("TextButton") or descendant:IsA("ImageButton") then
+            local name = tostring(descendant.Name or "")
+            local text = ""
+            if descendant:IsA("TextButton") then
+                text = tostring(descendant.Text or "")
+            end
+            if string.find(string.lower(name), target) or string.find(string.lower(text), target) then
+                pcall(function()
+                    descendant.MouseButton1Click:Fire()
+                end)
+                print("[Trade Bot] Clicked trade button:", name, text)
+                return true
+            end
+        end
+    end
+    return false
 end
 
 -- Reject trade request from player
@@ -204,28 +257,93 @@ local function readyTrade()
 		warn("[Trade Bot] SetReady remote not available")
 		return false 
 	end
-	local success, result = pcall(function() 
-		return tradingRemotes.SetReady:InvokeServer(true) 
-	end)
+    local success, result = pcall(function() 
+        if tradeId and tradeId > 0 then
+            return tradingRemotes.SetReady:InvokeServer(tradeId, true, tradeCounter)
+        end
+        return tradingRemotes.SetReady:InvokeServer(true)
+    end)
 	if not success then
 		warn("[Trade Bot] Failed to ready trade:", result)
+        if clickTradeButton("ready") then
+            return true
+        end
 	end
 	return result or false
 end
 
+-- Confirm trade
+local function confirmTrade()
+    if tradingRemotes.SetConfirmed then
+        local success, result = pcall(function()
+            if tradeId and tradeId > 0 then
+                return tradingRemotes.SetConfirmed:InvokeServer(tradeId, true, tradeCounter)
+            end
+            return tradingRemotes.SetConfirmed:InvokeServer(true)
+        end)
+        if success and result then
+            print("[Trade Bot] Confirmed trade via remote")
+            return true
+        end
+    end
+    return clickTradeButton("confirm")
+end
+
 -- Decline/cancel the active trade
 local function declineTrade()
-	if not tradingRemotes.Decline then 
-		warn("[Trade Bot] Decline remote not available")
-		return false 
+	print("[Trade Bot] Attempting to cancel trade... Trade ID:", tradeId)
+	
+	-- Method 1: Try using the Decline remote with the trade ID
+	if tradingRemotes.Decline and tradeId and tradeId > 0 then
+		local success = pcall(function() 
+			print("[Trade Bot] Calling Decline remote with Trade ID:", tradeId)
+			tradingRemotes.Decline:InvokeServer(tradeId)
+		end)
+		
+		if success then
+			print("[Trade Bot] Decline remote called successfully with Trade ID:", tradeId)
+			task.wait(0.5)
+			return true
+		else
+			print("[Trade Bot] Decline remote failed")
+		end
 	end
-	local success, result = pcall(function() 
-		return tradingRemotes.Decline:InvokeServer() 
+	
+	-- Method 2: Try the exact path: Frame > Buttons > CancelHolder > Cancel
+	local buttonClicked = false
+	
+	pcall(function()
+		local frame = tradingWindow:FindFirstChild("Frame")
+		if frame then
+			local buttons = frame:FindFirstChild("Buttons")
+			if buttons then
+				local cancelHolder = buttons:FindFirstChild("CancelHolder")
+				if cancelHolder then
+					local cancelButton = cancelHolder:FindFirstChild("Cancel")
+					if cancelButton then
+						print("[Trade Bot] Found Cancel button at exact path: Frame/Buttons/CancelHolder/Cancel")
+						cancelButton.MouseButton1Click:Fire()
+						buttonClicked = true
+						return
+					end
+				end
+			end
+		end
 	end)
-	if not success then
-		warn("[Trade Bot] Failed to decline trade:", result)
+	
+	if buttonClicked then
+		print("[Trade Bot] Cancel button clicked successfully!")
+		task.wait(0.5)
+		return true
 	end
-	return result or false
+	
+	-- Method 3: Force close the window
+	print("[Trade Bot] All methods failed, forcing window close...")
+	pcall(function()
+		tradingWindow.Enabled = false
+	end)
+	
+	return true
 end
 
 -- Add pet to current trade by UUID
@@ -471,15 +589,6 @@ else
 	end)
 end
 
---// Trade ID setting
-spawn(function()
-	while task.wait(1) do
-		pcall(function()
-			tradeId = getTradeId()
-		end)
-	end
-end)
-
 --// Connection Functions
 print("[RBXTide Trade Bot] initializing connects...")
 
@@ -491,9 +600,10 @@ local function connectMessage(localId, method, tradingItemsFunc)
 			local text = tradingMessage.Frame.Contents.Desc.Text
 			print("[Trade Bot] Trade message:", text)
 			
-			if text == "✅ Trade successfully completed!" then
-				sendMessage("Trade Completed!")
-				
+				if text == "✅ Trade successfully completed!" then
+					sendMessage("Trade Completed!")
+                tradeActive = false
+					
                 if method == "deposit" then
                     print("[Trade Bot] DEPOSIT COMPLETED - Notifying server")
                     for i,v in next, tradingItems do
@@ -524,17 +634,17 @@ local function connectMessage(localId, method, tradingItemsFunc)
 
 					pcall(function()
 						request({
-							Url = website .."/trading/items/confirm-withdraw",
-							Method = "POST",
-							Body = httpService:JSONEncode({
-								["userId"] = tradeUser,
-								["authKey"] = auth
-							}),
-							Headers = {
-								["Content-Type"] = "application/json",
-								["Authorization"] = auth
-							}
-						})
+                            Url = website .."/trading/items/confirm-withdraw",
+                            Method = "POST",
+                            Body = httpService:JSONEncode({
+                                ["userId"] = tradeUser,
+                                ["authKey"] = auth
+                            }),
+                            Headers = {
+                                ["Content-Type"] = "application/json",
+                                ["Authorization"] = auth
+                            }
+                        })
 					end)
                 end
 
@@ -546,12 +656,14 @@ local function connectMessage(localId, method, tradingItemsFunc)
 			elseif string.find(text, " cancelled the trade!") or string.find(text, "left the game") then
 				sendMessage("Trade Declined")
 				print("[Trade Bot] Trade was cancelled or player left")
+                tradeActive = false
 				messageConnection:Disconnect()
 				task.wait(1)
 				tradingMessage.Enabled = false
                 goNext = true
 			end
 		else
+            tradeActive = false
             goNext = true
 			messageConnection:Disconnect()
 		end
@@ -574,9 +686,20 @@ local function connectStatus(localId, method)
                     elseif localPlayer.PlayerGui.TradeWindow.Frame.PlayerDiamonds.TextLabel.Text ~= "0" then
                         sendMessage("Please don't add diamonds while depositing!")
                     else
-						print("[Trade Bot] Deposit validation passed - marking ready")
-                        readyTrade()
+                        print("[Trade Bot] Deposit validation passed - marking ready")
+                        local readyOk = readyTrade()
                         tradingItems = output
+                        if readyOk then
+                            task.spawn(function()
+                                local start = tick()
+                                while (tick() - start) < 10 and not goNext do
+                                    if confirmTrade() then
+                                        break
+                                    end
+                                    task.wait(0.2)
+                                end
+                            end)
+                        end
                     end
                 else
                     local error, output = checkItems(assetIds, goldAssetids, nameAssetIds)
@@ -585,8 +708,19 @@ local function connectStatus(localId, method)
                     elseif localPlayer.PlayerGui.TradeWindow.Frame.PlayerDiamonds.TextLabel.Text ~= "0" then
                         sendMessage("Please don't add diamonds!")
                     else
-						print("[Trade Bot] Withdraw validation passed - marking ready")
-                        readyTrade()
+                        print("[Trade Bot] Withdraw validation passed - marking ready")
+                        local readyOk = readyTrade()
+                        if readyOk then
+                            task.spawn(function()
+                                local start = tick()
+                                while (tick() - start) < 10 and not goNext do
+                                    if confirmTrade() then
+                                        break
+                                    end
+                                    task.wait(0.2)
+                                end
+                            end)
+                        end
                     end
                 end
 			end
@@ -636,7 +770,10 @@ spawn(function()
 
             local responseRequest, response
             local success = pcall(function()
-                responseRequest = request({
+                print("[Trade Bot] Sending trade check request to:", website .. "/check")
+                print("[Trade Bot] User ID:", tradeUser)
+                
+                local httpResponse = request({
                     Url = website .. "/trading/items/check-pending",
                     Method = "POST",
                     Body = httpService:JSONEncode({
@@ -645,16 +782,44 @@ spawn(function()
                         ["game"] = "PS99"
                     }),
                     Headers = {
-                        ["Content-Type"] = "application/json"
+                        ["Content-Type"] = "application/json",
+                        ["Authorization"] = auth
                     }
-                }).Body
+                })
                 
+                if not httpResponse then
+                    error("HTTP request returned nil - server may be unreachable")
+                end
+                
+                print("[Trade Bot] HTTP Status Code:", httpResponse.StatusCode or "nil")
+                
+                if httpResponse.StatusCode and httpResponse.StatusCode ~= 200 then
+                    -- Don't default to Deposit on error - reject instead for security
+                    error("HTTP Status: " .. tostring(httpResponse.StatusCode) .. " - " .. (httpResponse.Body or "no response body"))
+                end
+                
+                if not httpResponse.Body then
+                    error("HTTP response body is empty")
+                end
+                
+                responseRequest = httpResponse.Body
                 print("[Trade Bot] Server response:", responseRequest)
                 response = httpService:JSONDecode(responseRequest)
             end)
             
             if not success or not response then
+                warn("[Trade Bot] HTTP Request Error - Full Error Details Above")
+                if not success then
+                    print("[Trade Bot] PCCall error occurred during HTTP request")
+                else
+                    warn("[Trade Bot] Failed to parse server response as JSON")
+                end
                 warn("[Trade Bot] Failed to check pending trades with server")
+                print("[Trade Bot] Troubleshooting checklist:")
+                print("  1. Verify website URL is correct:", website)
+                print("  2. Verify auth token is set correctly")
+                print("  3. Check if server is running and reachable")
+                print("  4. Check server logs for errors")
                 sendMessage("Server connection error - try again later")
                 pcall(function()
                     rejectTradeRequest(tradePlayer)
@@ -669,15 +834,32 @@ spawn(function()
 				end)
             else
                 local accepted = acceptTradeRequest(tradePlayer)
+                
+                print("[Trade Bot] Trade accept result:", accepted)
                     
                 if not accepted then
+                    print("[Trade Bot] Accept failed, rejecting trade")
                     pcall(function()
                         rejectTradeRequest(tradePlayer)
                     end)
-                end
+                else
+                    print("[Trade Bot] Accept succeeded, proceeding with trade")
 
-                local localId  = getTradeId()
-                tradeId        = localId
+                -- Wait for the Trading: Created event to fire and set the real tradeId
+                local waitStart = tick()
+                print("[Trade Bot] Waiting for Trading: Created event to fire...")
+                while (tradeId == 0 or not tradingWindow.Enabled) and (tick() - waitStart < 10) do
+                    task.wait(0.1)
+                end
+                
+                if tradeId == 0 then
+                    warn("[Trade Bot] Failed to get trade ID from server after 10 seconds - trying to proceed anyway")
+                else
+                    print("[Trade Bot] Successfully received Trade ID:", tradeId)
+                end
+                
+                local localId = tradeId
+                tradeActive = (localId ~= 0)
 
                 if response["method"] == "Withdraw" then
                     print("[Trade Bot] Processing WITHDRAW request")
@@ -695,25 +877,21 @@ spawn(function()
                     local timeoutActive = true
                     spawn(function() 
                         task.wait(60)
-                        if timeoutActive and not goNext then
+                        if timeoutActive and not goNext and tradeActive and tradeId == localId then
                             print("[Trade Bot] Withdraw trade timed out after 60 seconds")
+                            timeoutActive = false -- Disable timeout before declining
+                            tradeActive = false
+                            
                             sendMessage("Trade declined, User timed out")
                             
                             -- Decline the trade
                             local declined = declineTrade()
-                            if not declined then
-                                warn("[Trade Bot] Failed to decline trade via remote, forcing close")
-                            end
+                            print("[Trade Bot] Trade decline result:", declined)
                             
-                            -- Force close trade window if still open
+                            -- Force cleanup
                             task.wait(1)
-                            if tradingWindow.Enabled then
-                                tradingWindow.Enabled = false
-                                print("[Trade Bot] Forced trade window closed")
-                            end
-                            
                             goNext = true
-                            task.wait(2) -- Wait before accepting new trades
+                            print("[Trade Bot] Ready for next trade")
                         end
                     end)
 
@@ -808,31 +986,28 @@ spawn(function()
                     local timeoutActive = true
                     spawn(function() 
                         task.wait(60)
-                        if timeoutActive and not goNext then
+                        if timeoutActive and not goNext and tradeActive and tradeId == localId then
                             print("[Trade Bot] Deposit trade timed out after 60 seconds")
+                            timeoutActive = false -- Disable timeout before declining
+                            tradeActive = false
+                            
                             sendMessage("Trade declined, User timed out")
                             
                             -- Decline the trade
                             local declined = declineTrade()
-                            if not declined then
-                                warn("[Trade Bot] Failed to decline trade via remote, forcing close")
-                            end
+                            print("[Trade Bot] Trade decline result:", declined)
                             
-                            -- Force close trade window if still open
+                            -- Force cleanup
                             task.wait(1)
-                            if tradingWindow.Enabled then
-                                tradingWindow.Enabled = false
-                                print("[Trade Bot] Forced trade window closed")
-                            end
-                            
                             goNext = true
-                            task.wait(2) -- Wait before accepting new trades
+                            print("[Trade Bot] Ready for next trade")
                         end
                     end)
 
                     connectMessage(localId, "deposit", {})
                     connectStatus(localId, "deposit")
                     goNext = false
+                end
                 end
             end
 		end
