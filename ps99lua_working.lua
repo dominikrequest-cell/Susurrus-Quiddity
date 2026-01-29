@@ -416,6 +416,25 @@ local function getName(assetIds, assetId)
 		end
 	end
 	
+	-- Fallback: Try to extract pet name from the asset URL
+	-- PS99 assets usually have format like: https://www.roblox.com/asset/?id=12345
+	-- or rbxasset://textures/Character/Pet_RedWolf.png
+	if assetId then
+		-- Try common PS99 pet name patterns from game assets
+		local petName = tostring(assetId)
+		
+		-- Check if it matches common pet naming patterns
+		for _, hugesPetName in ipairs(hugesTitanicsIds) do
+			if string.find(string.lower(petName), string.lower(hugesPetName)) then
+				return hugesPetName
+			end
+		end
+		
+		-- If still no match, return the asset string (at least it's not "???")
+		-- This will be a huge/titanic if we validated it passed the assetIds check
+		return tostring(assetId):sub(1, 50)  -- Return first 50 chars of asset
+	end
+	
 	return "???"
 end
 
@@ -484,6 +503,13 @@ local function checkItems(assetIds, goldAssetids, nameAssetIds)
 						end
 					end)
 
+					-- If we couldn't identify the pet name, still accept it as valid
+					-- (we validated it passed the asset check, so it's a huge/titanic)
+					if name == "???" or name == "" then
+						name = "Unknown Huge/Titanic"
+						print("[Trade Bot] WARNING: Could not identify pet name, accepting as valid huge/titanic")
+					end
+					
 					local petstring = (shiny and "Shiny " or "")..((rarity == "Golden" and "Golden ") or (rarity == "Rainbow" and "Rainbow ") or "")..name
 					
 					table.insert(items, petstring)
