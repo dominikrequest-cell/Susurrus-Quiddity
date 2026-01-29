@@ -280,8 +280,8 @@ local function readyTrade()
 		return false 
 	end
     local success, result = pcall(function() 
-        print("[Trade Bot] Calling SetReady with true")
-        return tradingRemotes.SetReady:InvokeServer(true)
+        print("[Trade Bot] Calling SetReady with localPlayer")
+        return tradingRemotes.SetReady:InvokeServer(localPlayer)
     end)
 	
 	if not success or not result then
@@ -297,8 +297,8 @@ end
 local function confirmTrade()
     if tradingRemotes.SetConfirmed then
         local success, result = pcall(function()
-            print("[Trade Bot] Calling SetConfirmed with true")
-            return tradingRemotes.SetConfirmed:InvokeServer(true)
+            print("[Trade Bot] Calling SetConfirmed with localPlayer")
+            return tradingRemotes.SetConfirmed:InvokeServer(localPlayer)
         end)
         if success and result then
             print("[Trade Bot] SetConfirmed remote succeeded, result:", result)
