@@ -76,9 +76,16 @@ class RobloxVerification:
     
     async def verify_code_in_description(self, user_id: int, code: str) -> bool:
         """Check if verification code exists in user's Roblox bio"""
-        description = await self.get_user_description(user_id, use_cache=False)
-        if description:
-            return code in description
+        try:
+            print(f"[DEBUG] Checking verification code for user {user_id}")
+            description = await self.get_user_description(user_id, use_cache=False)
+            print(f"[DEBUG] Got description: {description[:100] if description else 'None'}")
+            if description:
+                result = code in description
+                print(f"[DEBUG] Code {'found' if result else 'not found'} in description")
+                return result
+        except Exception as e:
+            print(f"[ERROR] Error verifying code: {e}")
         return False
     
     async def get_user_thumbnail(self, user_id: int, size: str = "420x420", fresh: bool = False) -> Optional[str]:
@@ -167,12 +174,19 @@ class RobloxVerification:
     async def _get_roblox_user_by_id(self, user_id: int) -> Optional[Dict]:
         """Fetch user info from Roblox API by user ID"""
         try:
+            print(f"[DEBUG] Fetching Roblox user info for ID {user_id}")
             response = await self.client.get(f"{self.ROBLOX_USERS_API}/{user_id}")
+            print(f"[DEBUG] Got response with status {response.status_code}")
             data = response.json()
             if "id" in data:
+                print(f"[DEBUG] Successfully got user data")
                 return data
+            else:
+                print(f"[DEBUG] No 'id' in response data: {data}")
+        except httpx.TimeoutException as e:
+            print(f"[ERROR] Timeout fetching user info for ID {user_id}: {e}")
         except Exception as e:
-            print(f"Error fetching user info for ID {user_id}: {e}")
+            print(f"[ERROR] Error fetching user info for ID {user_id}: {e}")
         return None
     
     async def close(self):
