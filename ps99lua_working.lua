@@ -280,23 +280,12 @@ local function readyTrade()
 		return false 
 	end
     local success, result = pcall(function() 
-        if tradeId and tradeId > 0 then
-            print("[Trade Bot] Calling SetReady with tradeId:", tradeId)
-            return tradingRemotes.SetReady:InvokeServer(tradeId, true, tradeCounter)
-        end
-        print("[Trade Bot] Calling SetReady without tradeId")
+        print("[Trade Bot] Calling SetReady with true")
         return tradingRemotes.SetReady:InvokeServer(true)
     end)
 	
-	-- If remote failed or returned false, try clicking the button
 	if not success or not result then
-		print("[Trade Bot] SetReady remote failed (success=" .. tostring(success) .. ", result=" .. tostring(result) .. "), trying button click")
-        task.wait(0.2)
-        if clickTradeButton("ready") then
-            print("[Trade Bot] Successfully clicked Ready button")
-            return true
-        end
-        print("[Trade Bot] Failed to click Ready button")
+		print("[Trade Bot] SetReady remote failed (success=" .. tostring(success) .. ", result=" .. tostring(result) .. ")")
         return false
 	else
 		print("[Trade Bot] SetReady remote returned:", result)
@@ -308,11 +297,7 @@ end
 local function confirmTrade()
     if tradingRemotes.SetConfirmed then
         local success, result = pcall(function()
-            if tradeId and tradeId > 0 then
-                print("[Trade Bot] Calling SetConfirmed with tradeId:", tradeId)
-                return tradingRemotes.SetConfirmed:InvokeServer(tradeId, true, tradeCounter)
-            end
-            print("[Trade Bot] Calling SetConfirmed without tradeId")
+            print("[Trade Bot] Calling SetConfirmed with true")
             return tradingRemotes.SetConfirmed:InvokeServer(true)
         end)
         if success and result then
