@@ -265,17 +265,21 @@ local function readyTrade()
         print("[Trade Bot] Calling SetReady without tradeId")
         return tradingRemotes.SetReady:InvokeServer(true)
     end)
-	if not success then
-		print("[Trade Bot] SetReady remote failed, result:", result)
+	
+	-- If remote failed or returned false, try clicking the button
+	if not success or not result then
+		print("[Trade Bot] SetReady remote failed (success=" .. tostring(success) .. ", result=" .. tostring(result) .. "), trying button click")
+        task.wait(0.2)
         if clickTradeButton("ready") then
             print("[Trade Bot] Successfully clicked Ready button")
             return true
         end
         print("[Trade Bot] Failed to click Ready button")
+        return false
 	else
 		print("[Trade Bot] SetReady remote returned:", result)
+		return result
 	end
-	return result or false
 end
 
 -- Confirm trade
@@ -293,10 +297,11 @@ local function confirmTrade()
             print("[Trade Bot] Confirmed trade via remote, result:", result)
             return true
         else
-            print("[Trade Bot] SetConfirmed remote failed or returned false/nil")
+            print("[Trade Bot] SetConfirmed remote failed (success=" .. tostring(success) .. ", result=" .. tostring(result) .. "), trying button")
         end
     end
     print("[Trade Bot] Attempting to click Confirm button")
+    task.wait(0.1)
     local clicked = clickTradeButton("confirm")
     if clicked then
         print("[Trade Bot] Successfully clicked Confirm button")
