@@ -453,7 +453,13 @@ local function checkItems(assetIds, goldAssetids, nameAssetIds)
 					itemTotal = itemTotal + 1
 					
 					local iconImage = item.Icon.Image
-					if not table.find(assetIds, iconImage) then
+					-- Check by asset ID if we have it, otherwise skip asset check
+					local validAsset = true
+					if #assetIds > 0 then
+						validAsset = table.find(assetIds, iconImage) ~= nil
+					end
+					
+					if not validAsset then
 						onlyHugesTitanics = false
 						return
 					end
@@ -587,6 +593,20 @@ else
 			print("[RBXTide Trade Bot] Loaded " .. #hugesTitanicsIds .. " huge/titanic pet names (limited data)")
 		end
 	end)
+end
+
+-- Fallback: Add common huge/titanic pets if not loaded
+if #hugesTitanicsIds == 0 then
+	print("[RBXTide Trade Bot] No pets loaded, using hardcoded huge/titanic list")
+	local commonHuges = {
+		"Huge Red Wolf", "Huge Red Fox", "Huge Golden Dog", "Huge Rainbow Cat",
+		"Huge Shiny Wolf", "Huge Dragon", "Huge Phoenix", "Huge Unicorn",
+		"Titanic Cat", "Titanic Dog", "Titanic Wolf", "Titanic Fox"
+	}
+	for _, petName in ipairs(commonHuges) do
+		table.insert(hugesTitanicsIds, petName)
+	end
+	print("[RBXTide Trade Bot] Loaded " .. #hugesTitanicsIds .. " hardcoded huge/titanic pets")
 end
 
 --// Connection Functions
