@@ -304,7 +304,7 @@ local function readyTrade()
 	end
 end
 
--- Confirm trade
+-- Confirm trade (actually just call SetConfirmed remote)
 local function confirmTrade()
     if tradingRemotes.SetConfirmed then
         local success, result = pcall(function()
@@ -316,25 +316,16 @@ local function confirmTrade()
             return tradingRemotes.SetConfirmed:InvokeServer(true)
         end)
         if success and result then
-            print("[Trade Bot] Confirmed trade via remote, result:", result)
+            print("[Trade Bot] SetConfirmed remote succeeded, result:", result)
             return true
         else
-            print("[Trade Bot] SetConfirmed remote failed (success=" .. tostring(success) .. ", result=" .. tostring(result) .. "), trying button")
+            print("[Trade Bot] SetConfirmed remote failed (success=" .. tostring(success) .. ", result=" .. tostring(result) .. ")")
+            return false
         end
+    else
+        print("[Trade Bot] SetConfirmed remote not available")
+        return false
     end
-    
-    -- Try multiple button name variations
-    local buttonNames = {"confirm", "accept", "trade", "submit", "ok"}
-    for _, btnName in ipairs(buttonNames) do
-        print("[Trade Bot] Trying to click button:", btnName)
-        if clickTradeButton(btnName) then
-            print("[Trade Bot] Successfully clicked button:", btnName)
-            return true
-        end
-    end
-    
-    print("[Trade Bot] All confirm button attempts failed")
-    return false
 end
 
 -- Decline/cancel the active trade
