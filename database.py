@@ -160,6 +160,7 @@ class Database:
                         "$set": {
                             "discord_id": discord_id,
                             "roblox_user_id": roblox_user_id,
+                            "roblox_user_id_str": str(roblox_user_id),
                             "roblox_username": roblox_username,
                             "discord_username": discord_username,
                             "verified": True,
@@ -184,8 +185,14 @@ class Database:
     async def get_discord_user_by_roblox(self, roblox_user_id: int) -> Optional[Dict]:
         """Get Discord user by their linked Roblox account"""
         try:
-            if self.discord_users:
-                return self.discord_users.find_one({"roblox_user_id": roblox_user_id})
+            if self.discord_users is not None:
+                return self.discord_users.find_one({
+                    "$or": [
+                        {"roblox_user_id": roblox_user_id},
+                        {"roblox_user_id": str(roblox_user_id)},
+                        {"roblox_user_id_str": str(roblox_user_id)}
+                    ]
+                })
         except Exception as e:
             print(f"[DB] Could not get user by roblox: {e}")
         return None
